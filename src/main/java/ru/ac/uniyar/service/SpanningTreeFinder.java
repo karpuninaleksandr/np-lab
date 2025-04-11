@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 public class SpanningTreeFinder {
     public BenchmarkResult findMinSpanningTree(BenchmarkTask task) {
         List<BenchmarkResult> tries = new ArrayList<>();
-        for (int k = 9; k <= 9; ++k) {
+        for (int k = 1; k <= task.getSize(); ++k) {
             Instant startTime = Instant.now();
             BenchmarkResult result = new BenchmarkResult();
             result.setEdges(new ArrayList<>());
@@ -79,10 +79,12 @@ public class SpanningTreeFinder {
             result.setLeaves(leaves);
             System.out.println("leaves:" + leaves + " weight: "+ result.getWeight());
             tries.add(result);
+            /*
             Duration duration = Duration.between(startTime, Instant.now());
-//            System.out.println("time (minutes): " + duration.toMinutes());
-//            System.out.println("time (seconds): " + duration.toSeconds());
-//            System.out.println("time (milliseconds): " + duration.toMillis());
+            System.out.println("time (minutes): " + duration.toMinutes());
+            System.out.println("time (seconds): " + duration.toSeconds());
+            System.out.println("time (milliseconds): " + duration.toMillis());
+             */
         }
         return tries.stream().min(Comparator.comparingInt(BenchmarkResult::getWeight)).orElse(null);
     }

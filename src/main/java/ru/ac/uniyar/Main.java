@@ -17,10 +17,10 @@ public class Main {
 //        System.out.println("result64: " + result64.getWeight());
 //        writer.writeResult(result64, "src/main/resources/result/Karpunin_64_1.txt");
 
-//        BenchmarkTask task128 = reader.readTask("src/main/resources/benchmark/Taxicab_128.txt");
-//        BenchmarkResult result128 = spanningTreeFinder.findMinSpanningTree(task128);
-//        System.out.println("result128: " + result128.getWeight() + " : " + result128.getLeaves());
-//        writer.writeResult(result128, "src/main/resources/result/Karpunin_128_1.txt");
+        BenchmarkTask task128 = reader.readTask("src/main/resources/benchmark/Taxicab_128.txt");
+        BenchmarkResult result128 = spanningTreeFinder.findMinSpanningTree(task128);
+        System.out.println("result128: " + result128.getWeight() + " : " + result128.getLeaves());
+        writer.writeResult(result128, "src/main/resources/result/Karpunin_128_1.txt");
 
 //        BenchmarkTask task512 = reader.readTask("src/main/resources/benchmark/Taxicab_512.txt");
 //        BenchmarkResult result512 = spanningTreeFinder.findMinSpanningTree(task512);
@@ -32,9 +32,9 @@ public class Main {
 //        System.out.println("result2048: " + result2048.getWeight() + " : " + result2048.getLeaves());
 //        writer.writeResult(result2048, "src/main/resources/result/Karpunin_2048_1.txt");
 
-        BenchmarkTask task4096 = reader.readTask("src/main/resources/benchmark/Taxicab_4096.txt");
-        BenchmarkResult result4096 = spanningTreeFinder.findMinSpanningTree(task4096);
-        System.out.println("result4096: " + result4096.getWeight() + " : " + result4096.getLeaves());
-        writer.writeResult(result4096, "src/main/resources/result/Karpunin_4096_1.txt");
+//        BenchmarkTask task4096 = reader.readTask("src/main/resources/benchmark/Taxicab_4096.txt");
+//        BenchmarkResult result4096 = spanningTreeFinder.findMinSpanningTree(task4096);
+//        System.out.println("result4096: " + result4096.getWeight() + " : " + result4096.getLeaves());
+//        writer.writeResult(result4096, "src/main/resources/result/Karpunin_4096_1.txt");
     }
 }
