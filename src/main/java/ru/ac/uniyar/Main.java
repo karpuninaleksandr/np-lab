@@ -16,6 +16,6 @@ public class Main {
         BenchmarkTask task = reader.readTask(String.format("src/main/resources/benchmark/Taxicab_%s.txt", taskSize));
         BenchmarkResult result = spanningTreeFinder.findMinSpanningTree(task);
         System.out.println("size: " + taskSize + ", weight: " + result.getWeight() + ", leaves: " + result.getLeaves());
-        writer.writeResult(result, String.format("src/main/resources/result/Karpunin_%s_%s.txt", taskSize, tryNumber));
+        writer.writeResult(result, String.format("src/main/resources/result//task_1/try_%s/Karpunin_%s_%s.txt", taskSize, tryNumber, tryNumber));
     }
 }
