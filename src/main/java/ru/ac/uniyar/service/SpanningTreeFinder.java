@@ -40,7 +40,7 @@ public class SpanningTreeFinder {
                 sortedWeights.putAll(currWeights);
                 weights.put(i, sortedWeights);
             }
-            int maxLeaves = task.getSize() / 16, leaves = 0;
+            int maxLeaves = task.getSize() / 16, leaves = 1;
 
             spanningTree.add(k);
             int minWeight = task.getSize();
