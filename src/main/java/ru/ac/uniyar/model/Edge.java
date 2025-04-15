@@ -8,4 +8,5 @@ import lombok.Getter;
 public class Edge {
     private int vertex1;
     private int vertex2;
+    private int weight;
 }

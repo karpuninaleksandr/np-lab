@@ -11,7 +11,7 @@ public class Main {
         BenchmarkTaskReader reader = new BenchmarkTaskReader();
         BenchmarkResultWriter writer = new BenchmarkResultWriter();
         SpanningTreeFinder spanningTreeFinder = new SpanningTreeFinder();
-        int taskSize = 4096, tryNumber = 2;
+        int taskSize = 128, tryNumber = 2;
 
         BenchmarkTask task = reader.readTask(String.format("src/main/resources/benchmark/Taxicab_%s.txt", taskSize));
         BenchmarkResult result = spanningTreeFinder.findMinSpanningTree(task);
