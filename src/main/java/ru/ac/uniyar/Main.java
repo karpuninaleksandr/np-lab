@@ -11,11 +11,11 @@ public class Main {
         BenchmarkTaskReader reader = new BenchmarkTaskReader();
         BenchmarkResultWriter writer = new BenchmarkResultWriter();
         SpanningTreeFinder spanningTreeFinder = new SpanningTreeFinder();
-        int taskSize = 64, tryNumber = 2;
+        int taskSize = 4096, tryNumber = 2;
 
         BenchmarkTask task = reader.readTask(String.format("src/main/resources/benchmark/Taxicab_%s.txt", taskSize));
         BenchmarkResult result = spanningTreeFinder.findMinSpanningTree(task);
         System.out.println("size: " + taskSize + ", weight: " + result.getWeight() + ", leaves: " + result.getLeaves());
-        writer.writeResult(result, String.format("src/main/resources/result//task_1/try_%s/Karpunin_%s_%s.txt", tryNumber, taskSize, tryNumber));
+        writer.writeResult(result, String.format("src/main/resources/result/task_1/try_%s/Karpunin_%s_%s.txt", tryNumber, taskSize, tryNumber));
     }
 }

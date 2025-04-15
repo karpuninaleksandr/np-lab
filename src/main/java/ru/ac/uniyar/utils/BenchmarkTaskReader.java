@@ -18,14 +18,21 @@ public class BenchmarkTaskReader {
             benchmarkTask.setSize(Integer.parseInt(line.substring(4)));
             line = reader.readLine();
             int numberCounter = 1;
+            int weight = 0;
+            Vertex lastVertex = null;
 
             while (line != null) {
                 String[] position = line.split("\t");
                 Vertex vertex = new Vertex(Integer.parseInt(position[0]), Integer.parseInt(position[1]), numberCounter);
+                if (lastVertex != null) {
+                    weight += Utils.getDistance(lastVertex, vertex);
+                }
+                lastVertex = vertex;
                 benchmarkTask.getVertexes().put(numberCounter, vertex);
                 line = reader.readLine();
                 ++numberCounter;
             }
+            System.out.println(weight);
 
             reader.close();
         } catch (Exception e) {
