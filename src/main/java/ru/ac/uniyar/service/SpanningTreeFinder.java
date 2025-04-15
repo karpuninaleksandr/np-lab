@@ -70,11 +70,6 @@ public class SpanningTreeFinder {
 
             result.setLeaves((int) degrees.values().stream().filter(it -> it == 1).count());
             results.add(result);
-            int w = 0;
-            for (Edge edge : result.getEdges()) {
-                w += Utils.getDistance(task.getVertexes().get(edge.getVertex1()), task.getVertexes().get(edge.getVertex2()));
-            }
-            System.out.println(k + " - " + result.getWeight() + " - " + w);
         }
 
         return results.stream().min(Comparator.comparingInt(BenchmarkResult::getWeight)).orElse(null);
