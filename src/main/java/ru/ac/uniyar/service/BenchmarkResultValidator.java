@@ -1,7 +1,7 @@
 package ru.ac.uniyar.service;
 
-import ru.ac.uniyar.model.BenchmarkResult;
-import ru.ac.uniyar.model.BenchmarkTask;
+import ru.ac.uniyar.model.Result;
+import ru.ac.uniyar.model.Task;
 import ru.ac.uniyar.model.Edge;
 import ru.ac.uniyar.utils.Utils;
 
@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class BenchmarkResultValidator {
-    public void validate(BenchmarkTask task, BenchmarkResult result) {
+    public void validate(Task task, Result result) {
         int weight = 0, leaves;
         Map<Integer, Integer> degrees = new HashMap<>();
         for (int i = 1; i <= task.getSize(); ++i) {

@@ -6,13 +6,12 @@ import ru.ac.uniyar.utils.Utils;
 import java.util.*;
 
 public class SpanningTreeFinder {
-    public BenchmarkResult findMinSpanningTree(BenchmarkTask task) {
+    public Result findMinSpanningTree(Task task) {
         int n = task.getSize();
         int maxLeaves = n / 16;
         Map<Integer, Vertex> vertexes = task.getVertexes();
-        List<BenchmarkResult> results = new ArrayList<>();
-//        for (int k = 1; k <= n; ++k) {
-        for (int k = 699; k <= 699; ++k) {
+        List<Result> results = new ArrayList<>();
+        for (int k = 1; k <= n; ++k) {
             Map<Integer, Boolean> spanningTree = new HashMap<>();
             Map<Integer, Integer> degrees = new HashMap<>();
             for (int i = 1; i <= n; ++i) {
@@ -20,7 +19,7 @@ public class SpanningTreeFinder {
                 degrees.put(i, 0);
             }
             PriorityQueue<Edge> queue = new PriorityQueue<>(Comparator.comparingInt(Edge::getWeight));
-            BenchmarkResult result = new BenchmarkResult();
+            Result result = new Result();
             result.setEdges(new ArrayList<>());
             spanningTree.put(k, true);
             for (int i = 1; i <= n; ++i) {
@@ -76,10 +75,10 @@ public class SpanningTreeFinder {
                 break;
             }
         }
-        return results.stream().min(Comparator.comparingInt(BenchmarkResult::getWeight)).orElse(null);
+        return results.stream().min(Comparator.comparingInt(Result::getWeight)).orElse(null);
     }
 
-    private void postProcess(BenchmarkResult result, Map<Integer, Vertex> vertices, int n, int maxLeaves) {
+    private void postProcess(Result result, Map<Integer, Vertex> vertices, int n, int maxLeaves) {
         boolean improved = true;
 
         while (improved) {

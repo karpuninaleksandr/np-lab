@@ -11,7 +11,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class BenchmarkResult {
+public class Result {
     private int weight;
     private int leaves;
     private List<Edge> edges;
