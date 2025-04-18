@@ -93,13 +93,13 @@ public class SpanningTreeFinder {
         for (int d : degrees) if (d == 1) ++finalLeafCount;
         result.setWeight(result.getEdges().stream().mapToInt(Edge::getWeight).sum());
         result.setLeaves(finalLeafCount);
-        localEdgeReplacementOptimization(result, n, maxLeaves, weights);
+        postprocess(result, n, maxLeaves, weights);
         System.out.println("=================== " + k + " - " + result.getWeight());
 
         return result;
     }
 
-    private void localEdgeReplacementOptimization(Result result, int n, int maxLeaves, int[][] weights) {
+    private void postprocess(Result result, int n, int maxLeaves, int[][] weights) {
         boolean improved = true;
         int count = 0;
 
@@ -108,7 +108,6 @@ public class SpanningTreeFinder {
             ++count;
             System.out.println(count + " : " + result.getWeight());
             List<Edge> edges = result.getEdges();
-
             int[] degrees = new int[n + 1];
             for (Edge e : edges) {
                 degrees[e.getVertex1()]++;
