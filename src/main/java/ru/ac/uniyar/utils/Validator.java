@@ -1,15 +1,14 @@
-package ru.ac.uniyar.service;
+package ru.ac.uniyar.utils;
 
-import ru.ac.uniyar.model.Result;
+import ru.ac.uniyar.model.results.LCMSTResult;
 import ru.ac.uniyar.model.Task;
 import ru.ac.uniyar.model.Edge;
-import ru.ac.uniyar.utils.Utils;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class BenchmarkResultValidator {
-    public void validate(Task task, Result result) {
+public class Validator {
+    public static void validateLCMSTResult(Task task, LCMSTResult result) {
         int weight = 0, leaves;
         Map<Integer, Integer> degrees = new HashMap<>();
         for (int i = 1; i <= task.getSize(); ++i) {

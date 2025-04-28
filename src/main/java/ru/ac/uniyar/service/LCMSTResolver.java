@@ -1,13 +1,14 @@
 package ru.ac.uniyar.service;
 
 import ru.ac.uniyar.model.*;
+import ru.ac.uniyar.model.results.LCMSTResult;
 import ru.ac.uniyar.utils.Utils;
 
 import java.util.*;
 import java.util.concurrent.*;
 
-public class SpanningTreeFinder {
-    public Result findMinSpanningTree(Task task) {
+public class LCMSTResolver {
+    public static LCMSTResult getAnswer(Task task) {
         int n = task.getSize();
         int maxLeaves = n / 16;
         int[][] weights = new int[n + 1][n + 1];
@@ -20,17 +21,17 @@ public class SpanningTreeFinder {
         }
 
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        List<Callable<Result>> tasks = new ArrayList<>();
+        List<Callable<LCMSTResult>> tasks = new ArrayList<>();
 
         for (int k = 1; k <= n; ++k) {
             int finalK = k;
             tasks.add(() -> checkVertex(finalK, n, maxLeaves, weights));
         }
 
-        List<Result> results = new ArrayList<>();
+        List<LCMSTResult> LCMSTResults = new ArrayList<>();
         try {
-            for (Future<Result> future : executorService.invokeAll(tasks)) {
-                results.add(future.get());
+            for (Future<LCMSTResult> future : executorService.invokeAll(tasks)) {
+                LCMSTResults.add(future.get());
             }
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
@@ -38,18 +39,18 @@ public class SpanningTreeFinder {
             executorService.shutdown();
         }
 
-        return results.stream()
-                .min(Comparator.comparingInt(Result::getWeight))
+        return LCMSTResults.stream()
+                .min(Comparator.comparingInt(LCMSTResult::getWeight))
                 .orElse(null);
     }
 
-    private Result checkVertex(int k, int n, int maxLeaves, int[][] weights) {
+    private static LCMSTResult checkVertex(int k, int n, int maxLeaves, int[][] weights) {
         boolean[] spanningTree = new boolean[n + 1];
         int[] degrees = new int[n + 1];
 
         PriorityQueue<Edge> queue = new PriorityQueue<>(Comparator.comparingInt(Edge::getWeight));
-        Result result = new Result();
-        result.setEdges(new ArrayList<>());
+        LCMSTResult LCMSTResult = new LCMSTResult();
+        LCMSTResult.setEdges(new ArrayList<>());
 
         spanningTree[k] = true;
         for (int i = 1; i <= n; ++i) {
@@ -58,7 +59,7 @@ public class SpanningTreeFinder {
             }
         }
 
-        while (result.getEdges().size() < n - 1 && !queue.isEmpty()) {
+        while (LCMSTResult.getEdges().size() < n - 1 && !queue.isEmpty()) {
             Edge edge = queue.poll();
             int u = edge.getVertex1();
             int v = edge.getVertex2();
@@ -75,7 +76,7 @@ public class SpanningTreeFinder {
             }
 
             if (leafCount <= maxLeaves) {
-                result.getEdges().add(edge);
+                LCMSTResult.getEdges().add(edge);
                 degrees = tempDegrees;
 
                 int newNode = spanningTree[u] ? v : u;
@@ -91,23 +92,23 @@ public class SpanningTreeFinder {
 
         int finalLeafCount = 0;
         for (int d : degrees) if (d == 1) ++finalLeafCount;
-        result.setWeight(result.getEdges().stream().mapToInt(Edge::getWeight).sum());
-        result.setLeaves(finalLeafCount);
-        postprocess(result, n, maxLeaves, weights);
-        System.out.println("=================== " + k + " - " + result.getWeight());
+        LCMSTResult.setWeight(LCMSTResult.getEdges().stream().mapToInt(Edge::getWeight).sum());
+        LCMSTResult.setLeaves(finalLeafCount);
+        postProcess(LCMSTResult, n, maxLeaves, weights);
+        System.out.println("=================== " + k + " - " + LCMSTResult.getWeight());
 
-        return result;
+        return LCMSTResult;
     }
 
-    private void postprocess(Result result, int n, int maxLeaves, int[][] weights) {
+    private static void postProcess(LCMSTResult LCMSTResult, int n, int maxLeaves, int[][] weights) {
         boolean improved = true;
         int count = 0;
 
         while (improved) {
             improved = false;
             ++count;
-            System.out.println(count + " : " + result.getWeight());
-            List<Edge> edges = result.getEdges();
+            System.out.println(count + " : " + LCMSTResult.getWeight());
+            List<Edge> edges = LCMSTResult.getEdges();
             int[] degrees = new int[n + 1];
             for (Edge e : edges) {
                 degrees[e.getVertex1()]++;
@@ -147,8 +148,8 @@ public class SpanningTreeFinder {
 
                         if (newLeafCount <= maxLeaves) {
                             edges.set(i, replacement);
-                            result.setWeight(edges.stream().mapToInt(Edge::getWeight).sum());
-                            result.setLeaves(newLeafCount);
+                            LCMSTResult.setWeight(edges.stream().mapToInt(Edge::getWeight).sum());
+                            LCMSTResult.setLeaves(newLeafCount);
                             improved = true;
                             break outer;
                         } else {
