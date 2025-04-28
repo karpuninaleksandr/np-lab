@@ -5,14 +5,16 @@ import ru.ac.uniyar.model.enums.TaskType;
 import ru.ac.uniyar.model.enums.Try;
 import ru.ac.uniyar.model.results.LCMSTResult;
 import ru.ac.uniyar.model.Task;
+import ru.ac.uniyar.model.results.VRPResult;
+import ru.ac.uniyar.service.VRPResolver;
 import ru.ac.uniyar.utils.Validator;
 import ru.ac.uniyar.service.LCMSTResolver;
 import ru.ac.uniyar.utils.Writer;
 import ru.ac.uniyar.utils.Reader;
 
 public class Main {
-    private static final TaskSize size = TaskSize.TASK_64;
-    private static final TaskType type = TaskType.LCMST;
+    private static final TaskSize size = TaskSize.TASK_128;
+    private static final TaskType type = TaskType.VRP;
     private static final Try tryNum = Try.FIRST;
 
     public static void main(String[] args) {
@@ -27,7 +29,9 @@ public class Main {
                         tryNum.getNum(), size.getCode(), tryNum.getNum()));
             }
             case VRP -> {
-
+                VRPResult result = VRPResolver.getAnswer(task);
+                System.out.println("maxCycleWeight: " + result.getMaxCycleWeight() + ", totalWeight: " + result.getTotalWeight() + ", depot: " + result.getDepot());
+                Validator.validateVRPResult(task, result);
             }
         }
     }
