@@ -13,7 +13,7 @@ import ru.ac.uniyar.utils.Writer;
 import ru.ac.uniyar.utils.Reader;
 
 public class Main {
-    private static final TaskSize size = TaskSize.TASK_128;
+    private static final TaskSize size = TaskSize.TASK_4096;
     private static final TaskType type = TaskType.VRP;
     private static final Try tryNum = Try.FIRST;
 
@@ -25,13 +25,16 @@ public class Main {
                 LCMSTResult result = LCMSTResolver.getAnswer(task);
                 System.out.println("weight: " + result.getWeight() + ", leaves: " + result.getLeaves());
                 Validator.validateLCMSTResult(task, result);
-                Writer.writeLCMSTResult(result, String.format("src/main/resources/result/lcmst/try_%s/Karpunin_%s_%s.txt",
-                        tryNum.getNum(), size.getCode(), tryNum.getNum()));
+                Writer.writeLCMSTResult(result, "src/main/resources/result/lcmst/try_%s/Karpunin_%s_%s.txt"
+                        .formatted(tryNum.getNum(), size.getCode(), tryNum.getNum()));
             }
             case VRP -> {
                 VRPResult result = VRPResolver.getAnswer(task);
-                System.out.println("maxCycleWeight: " + result.getMaxCycleWeight() + ", totalWeight: " + result.getTotalWeight() + ", depot: " + result.getDepot());
+                System.out.println("maxCycleWeight: " + result.getMaxCycleWeight() + ", totalWeight: " +
+                        result.getTotalWeight() + ", depot: " + result.getDepot());
                 Validator.validateVRPResult(task, result);
+                Writer.writeVRPResult(result, "src/main/resources/result/vrp/try_%s/Karpunin_%s_%s.txt"
+                        .formatted(tryNum.getNum(), size.getCode(), tryNum.getNum()), task);
             }
         }
     }
