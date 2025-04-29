@@ -92,9 +92,11 @@ public class VRPResolver {
             current = next;
         }
 
-        route.add(depot); // возвращаемся в депо
-        return route;
+        route.add(depot);
+
+        return twoOpt(route, task);
     }
+
 
     private static int calculateRouteLength(List<Integer> route, Task task) {
         int length = 0;
@@ -102,5 +104,29 @@ public class VRPResolver {
             length += Utils.getDistance(task.getVertexes().get(route.get(i)), task.getVertexes().get(route.get(i + 1)));
         }
         return length;
+    }
+
+    private static List<Integer> twoOpt(List<Integer> route, Task task) {
+        boolean improvement = true;
+        int size = route.size();
+
+        while (improvement) {
+            improvement = false;
+            for (int i = 1; i < size - 2; i++) {
+                for (int j = i + 1; j < size - 1; j++) {
+                    int delta =
+                            Utils.getDistance(task.getVertexes().get(route.get(i - 1)), task.getVertexes().get(route.get(j))) +
+                                    Utils.getDistance(task.getVertexes().get(route.get(i)), task.getVertexes().get(route.get(j + 1))) -
+                                    Utils.getDistance(task.getVertexes().get(route.get(i - 1)), task.getVertexes().get(route.get(i))) -
+                                    Utils.getDistance(task.getVertexes().get(route.get(j)), task.getVertexes().get(route.get(j + 1)));
+
+                    if (delta < 0) {
+                        Collections.reverse(route.subList(i, j + 1));
+                        improvement = true;
+                    }
+                }
+            }
+        }
+        return route;
     }
 }
