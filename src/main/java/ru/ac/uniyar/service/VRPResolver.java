@@ -4,6 +4,8 @@ import ru.ac.uniyar.model.Task;
 import ru.ac.uniyar.model.results.VRPResult;
 import ru.ac.uniyar.utils.Utils;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -15,12 +17,19 @@ public class VRPResolver {
         int n = task.getSize();
         int m = (int) (Math.log(n) / Math.log(2));
 
+        int[][] dist = new int[task.getSize() + 1][task.getSize() + 1];
+        for (int i = 1; i <= task.getSize(); i++) {
+            for (int j = 1; j <= task.getSize(); j++) {
+                dist[i][j] = Utils.getDistance(task.getVertexes().get(i), task.getVertexes().get(j));
+            }
+        }
+
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<VRPResult>> futures = new ArrayList<>();
 
         for (int depot = 1; depot <= n; ++depot) {
             final int currentDepot = depot;
-            futures.add(CompletableFuture.supplyAsync(() -> computeResultForDepot(task, currentDepot, m), executor));
+            futures.add(CompletableFuture.supplyAsync(() -> computeResultForDepot(task, currentDepot, m, dist), executor));
         }
 
         List<VRPResult> results = futures.stream()
@@ -36,13 +45,8 @@ public class VRPResolver {
                 .orElse(null);
     }
 
-    private static VRPResult computeResultForDepot(Task task, int depot, int m) {
-        int[][] dist = new int[task.getSize() + 1][task.getSize() + 1];
-        for (int i = 1; i <= task.getSize(); i++) {
-            for (int j = 1; j <= task.getSize(); j++) {
-                dist[i][j] = Utils.getDistance(task.getVertexes().get(i), task.getVertexes().get(j));
-            }
-        }
+    private static VRPResult computeResultForDepot(Task task, int depot, int m, int[][] dist) {
+        Instant start = Instant.now();
 
         List<Integer> otherVertices = new ArrayList<>();
         for (int i = 1; i <= task.getSize(); ++i) {
@@ -51,7 +55,7 @@ public class VRPResolver {
             }
         }
 
-        List<List<Integer>> clusters = cluster(otherVertices, m, task, depot);
+        List<List<Integer>> clusters = cluster(otherVertices, m, depot, dist);
 
         Map<Integer, List<Integer>> ways = new HashMap<>();
         int maxWayLength = 0;
@@ -120,18 +124,48 @@ public class VRPResolver {
             }
         }
 
-        // Final 2-opt improvement after exchanges
-        for (Map.Entry<Integer, List<Integer>> entry : ways.entrySet()) {
-            entry.setValue(twoOpt(entry.getValue(), dist));
-        }
+        boolean improvedShift = true;
+        while (improvedShift) {
+            improvedShift = false;
+            List<Integer> keys = new ArrayList<>(ways.keySet());
+            keys.sort(Comparator.comparingInt(k -> calculateRouteLength(ways.get(k), dist)));
 
-        // Recompute lengths
-        maxWayLength = 0;
-        totalLength = 0;
-        for (List<Integer> r : ways.values()) {
-            int len = calculateRouteLength(r, dist);
-            totalLength += len;
-            maxWayLength = Math.max(maxWayLength, len);
+            int longest = keys.get(keys.size() - 1);
+            int shortest = keys.get(0);
+
+            List<Integer> longRoute = new ArrayList<>(ways.get(longest));
+            List<Integer> shortRoute = new ArrayList<>(ways.get(shortest));
+
+            for (int i = 1; i < longRoute.size() - 1; i++) {
+                int city = longRoute.get(i);
+                List<Integer> newLong = new ArrayList<>(longRoute);
+                newLong.remove(i);
+
+                for (int j = 1; j < shortRoute.size(); j++) {
+                    List<Integer> newShort = new ArrayList<>(shortRoute);
+                    newShort.add(j, city);
+
+                    int newLongLen = calculateRouteLength(newLong, dist);
+                    int newShortLen = calculateRouteLength(newShort, dist);
+                    int newMax = Math.max(newLongLen, newShortLen);
+
+                    if (newMax < maxWayLength) {
+                        ways.put(longest, twoOpt(newLong, dist));
+                        ways.put(shortest, twoOpt(newShort, dist));
+                        improvedShift = true;
+
+                        maxWayLength = 0;
+                        totalLength = 0;
+                        for (List<Integer> r : ways.values()) {
+                            int len = calculateRouteLength(r, dist);
+                            totalLength += len;
+                            maxWayLength = Math.max(maxWayLength, len);
+                        }
+                        break;
+                    }
+                }
+                if (improvedShift) break;
+            }
         }
 
         VRPResult result = new VRPResult();
@@ -140,17 +174,17 @@ public class VRPResolver {
         result.setMaxCycleWeight(maxWayLength);
         result.setTotalWeight(totalLength);
 
-        System.out.println(depot + " " + maxWayLength + " " + totalLength);
+        System.out.println(depot + " " + maxWayLength + " " + totalLength + " " + Duration.between(start, Instant.now()).toMillis());
         return result;
     }
 
-    private static List<List<Integer>> cluster(List<Integer> vertices, int m, Task task, int depot) {
+    private static List<List<Integer>> cluster(List<Integer> vertices, int m, int depot, int[][] dist) {
         List<List<Integer>> clusters = new ArrayList<>();
         for (int i = 0; i < m; ++i) {
             clusters.add(new ArrayList<>());
         }
 
-        vertices.sort(Comparator.comparingInt(v -> Utils.getDistance(task.getVertexes().get(depot), task.getVertexes().get(v))));
+        vertices.sort(Comparator.comparingInt(v -> dist[depot][v]));
         List<Integer> centers = new ArrayList<>(vertices.subList(0, m));
         Set<Integer> assigned = new HashSet<>(centers);
 
@@ -165,9 +199,9 @@ public class VRPResolver {
             int minDistance = Integer.MAX_VALUE;
             for (int i = 0; i < m; ++i) {
                 for (int c : clusters.get(i)) {
-                    int dist = Utils.getDistance(task.getVertexes().get(v), task.getVertexes().get(c));
-                    if (dist < minDistance) {
-                        minDistance = dist;
+                    int distance = dist[v][c];
+                    if (distance < minDistance) {
+                        minDistance = distance;
                         bestCluster = i;
                     }
                 }
@@ -187,21 +221,20 @@ public class VRPResolver {
         int current = depot;
 
         while (!unvisited.isEmpty()) {
-            int next = -1;
-            int minDist = Integer.MAX_VALUE;
-            for (int v : unvisited) {
-                if (dist[current][v] < minDist) {
-                    minDist = dist[current][v];
-                    next = v;
-                }
-            }
+            int finalCurrent = current;
+            PriorityQueue<Integer> pq = new PriorityQueue<>(Comparator.comparingInt(v -> dist[finalCurrent][v]));
+            pq.addAll(unvisited);
+
+            int next = pq.poll();
             route.add(next);
             unvisited.remove(next);
             current = next;
         }
 
         route.add(depot);
-        return route;
+
+        // Сразу применим локальную оптимизацию 2-opt
+        return twoOpt(route, dist);
     }
 
     private static int calculateRouteLength(List<Integer> route, int[][] dist) {
