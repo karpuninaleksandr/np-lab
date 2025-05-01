@@ -13,7 +13,7 @@ import ru.ac.uniyar.utils.Writer;
 import ru.ac.uniyar.utils.Reader;
 
 public class Main {
-    private static final TaskSize size = TaskSize.TASK_64;
+    private static final TaskSize size = TaskSize.TASK_512;
     private static final TaskType type = TaskType.VRP;
     private static final Try tryNum = Try.FIRST;
 
