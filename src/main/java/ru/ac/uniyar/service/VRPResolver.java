@@ -11,12 +11,13 @@ import java.util.concurrent.*;
 
 public class VRPResolver {
 
-    private static final int MAX_OPT_ITER = 100;
+    private static final int MAX_OPT_ITER = 500;
     private static final int NUM_TRIALS = 100;
 
     public static VRPResult getAnswer(Task task) {
         int n = task.getSize();
         int m = (int) (Math.log(n) / Math.log(2));
+        int k = Math.min(30, n);
 
         int[][] dist = new int[n + 1][n + 1];
         for (int i = 1; i <= n; i++) {
@@ -25,66 +26,77 @@ public class VRPResolver {
             }
         }
 
+        List<Integer> candidates = new ArrayList<>();
+        for (int i = 1; i <= n; i++) candidates.add(i);
+
+        candidates.sort(Comparator.comparingInt(i ->
+                Arrays.stream(dist[i]).sum()));
+
+        List<Integer> bestDepots = candidates.subList(0, k);
+
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<VRPResult>> futures = new ArrayList<>();
 
-        for (int depot = 1; depot <= n; ++depot) {
+        for (int depot : bestDepots) {
             final int currentDepot = depot;
-            futures.add(CompletableFuture.supplyAsync(() -> {
-                VRPResult best = null;
-                for (int t = 0; t < NUM_TRIALS; ++t) {
-                    VRPResult result = computeResultForDepot(task, currentDepot, m, dist, t);
-                    if (best == null || result.getMaxCycleWeight() < best.getMaxCycleWeight() ||
-                            (result.getMaxCycleWeight() == best.getMaxCycleWeight() && result.getTotalWeight() < best.getTotalWeight())) {
-                        best = result;
-                    }
-                }
-                return best;
-            }, executor));
+            futures.add(CompletableFuture.supplyAsync(() -> computeBestForDepot(task, currentDepot, m, dist), executor));
         }
 
-        List<VRPResult> results = futures.stream()
-                .map(CompletableFuture::join)
-                .toList();
-
+        List<VRPResult> results = futures.stream().map(CompletableFuture::join).toList();
         executor.shutdown();
 
         return results.stream()
-                .min(Comparator
-                        .comparingInt(VRPResult::getMaxCycleWeight)
-                        .thenComparingInt(VRPResult::getTotalWeight))
+                .min(Comparator.comparingInt(VRPResult::getMaxCycleWeight).thenComparingInt(VRPResult::getTotalWeight))
                 .orElse(null);
     }
 
-    private static VRPResult computeResultForDepot(Task task, int depot, int m, int[][] dist, int seed) {
+    private static VRPResult computeBestForDepot(Task task, int depot, int m, int[][] dist) {
+        VRPResult best = null;
+        for (int t = 0; t < NUM_TRIALS; ++t) {
+            VRPResult result = computeResultForDepot(task, depot, m, dist);
+            if (best == null || result.getMaxCycleWeight() < best.getMaxCycleWeight() ||
+                    (result.getMaxCycleWeight() == best.getMaxCycleWeight() && result.getTotalWeight() < best.getTotalWeight())) {
+                best = result;
+            }
+        }
+        return best;
+    }
+
+    private static VRPResult computeResultForDepot(Task task, int depot, int m, int[][] dist) {
         Instant start = Instant.now();
         List<Integer> otherVertices = new ArrayList<>();
-        for (int i = 1; i <= task.getSize(); ++i) {
-            if (i != depot) otherVertices.add(i);
-        }
+        for (int i = 1; i <= task.getSize(); ++i) if (i != depot) otherVertices.add(i);
 
-        List<List<Integer>> clusters = clusterWithNoise(otherVertices, m, depot, dist, seed);
+        List<List<Integer>> clusters = clusterSmart(otherVertices, m, depot, dist);
         balanceClusters(clusters, dist, depot);
 
-        Map<Integer, List<Integer>> ways = new HashMap<>();
-        int maxWayLength = 0;
-        int totalLength = 0;
+        Map<Integer, List<Integer>> ways = new ConcurrentHashMap<>();
+        ExecutorService clusterExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        List<Future<Map.Entry<Integer, List<Integer>>>> futures = new ArrayList<>();
+
         int vehicleId = 1;
-
         for (List<Integer> cluster : clusters) {
-            List<Integer> route = improveRoute(buildRoute(cluster, depot, dist), dist);
-            ways.put(vehicleId++, route);
-
-            int length = calculateRouteLength(route, dist);
-            maxWayLength = Math.max(maxWayLength, length);
-            totalLength += length;
+            final int vid = vehicleId++;
+            futures.add(clusterExecutor.submit(() -> {
+                List<Integer> initial = buildRoute(cluster, depot, dist);
+                List<Integer> improved = improveRoute(initial, dist);
+                return Map.entry(vid, improved);
+            }));
         }
 
-        // обмен клиентами между маршрутами для улучшения макс длины
-        boolean improved = true;
-        int iter = 0;
-        while (improved && iter++ < MAX_OPT_ITER) {
-            improved = false;
+        for (Future<Map.Entry<Integer, List<Integer>>> f : futures) {
+            try {
+                Map.Entry<Integer, List<Integer>> entry = f.get();
+                ways.put(entry.getKey(), entry.getValue());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        clusterExecutor.shutdown();
+
+        // Improve inter-route
+        for (int iter = 0; iter < MAX_OPT_ITER; iter++) {
+            boolean improved = false;
             List<Integer> keys = new ArrayList<>(ways.keySet());
 
             for (int i = 0; i < keys.size(); i++) {
@@ -94,7 +106,6 @@ public class VRPResolver {
 
                     int currentMax = Math.max(calculateRouteLength(routeA, dist), calculateRouteLength(routeB, dist));
 
-                    outer:
                     for (int a = 1; a < routeA.size() - 1; a++) {
                         for (int b = 1; b < routeB.size() - 1; b++) {
                             int tempA = routeA.get(a);
@@ -107,22 +118,24 @@ public class VRPResolver {
                                 ways.put(keys.get(i), improveRoute(routeA, dist));
                                 ways.put(keys.get(j), improveRoute(routeB, dist));
                                 improved = true;
-                                break outer;
+                                break;
                             } else {
                                 routeA.set(a, tempA);
                                 routeB.set(b, tempB);
                             }
                         }
+                        if (improved) break;
                     }
+                    if (improved) break;
                 }
+                if (improved) break;
             }
+            if (!improved) break;
         }
 
-        // смещение узлов из длинных маршрутов в короткие
-        boolean improvedShift = true;
-        iter = 0;
-        while (improvedShift && iter++ < MAX_OPT_ITER) {
-            improvedShift = false;
+        // Shift from longest to shortest
+        for (int iter = 0; iter < MAX_OPT_ITER; iter++) {
+            boolean improved = false;
             List<Map.Entry<Integer, Integer>> sorted = ways.entrySet().stream()
                     .map(e -> Map.entry(e.getKey(), calculateRouteLength(e.getValue(), dist)))
                     .sorted(Map.Entry.comparingByValue())
@@ -142,17 +155,17 @@ public class VRPResolver {
                 for (int j = 1; j < shortRoute.size(); j++) {
                     List<Integer> newShort = new ArrayList<>(shortRoute);
                     newShort.add(j, city);
-
                     int newMax = Math.max(calculateRouteLength(newLong, dist), calculateRouteLength(newShort, dist));
                     if (newMax < calculateRouteLength(longRoute, dist)) {
                         ways.put(longest, improveRoute(newLong, dist));
                         ways.put(shortest, improveRoute(newShort, dist));
-                        improvedShift = true;
+                        improved = true;
                         break;
                     }
                 }
-                if (improvedShift) break;
+                if (improved) break;
             }
+            if (!improved) break;
         }
 
         VRPResult result = new VRPResult();
@@ -165,36 +178,34 @@ public class VRPResolver {
         return result;
     }
 
-    private static List<List<Integer>> clusterWithNoise(List<Integer> vertices, int m, int depot, int[][] dist, int seed) {
+    private static List<List<Integer>> clusterSmart(List<Integer> vertices, int m, int depot, int[][] dist) {
         List<List<Integer>> clusters = new ArrayList<>();
-        for (int i = 0; i < m; ++i) clusters.add(new ArrayList<>());
+        for (int i = 0; i < m; i++) clusters.add(new ArrayList<>());
 
-        Random random = new Random(seed);
-        Map<Integer, Integer> noise = new HashMap<>();
-        for (int v : vertices) {
-            noise.put(v, random.nextInt(5));
+        List<Integer> centers = new ArrayList<>();
+        centers.add(vertices.stream().min(Comparator.comparingInt(v -> dist[depot][v])).orElseThrow());
+
+        while (centers.size() < m) {
+            int nextCenter = vertices.stream()
+                    .filter(v -> !centers.contains(v))
+                    .max(Comparator.comparingInt(v -> centers.stream().mapToInt(c -> dist[v][c]).min().orElse(Integer.MAX_VALUE)))
+                    .orElseThrow();
+            centers.add(nextCenter);
         }
-        vertices.sort(Comparator.comparingInt(v -> dist[depot][v] + noise.get(v)));
 
-        List<Integer> centers = new ArrayList<>(vertices.subList(0, m));
-        Set<Integer> assigned = new HashSet<>(centers);
-
-        for (int i = 0; i < m; ++i) clusters.get(i).add(centers.get(i));
+        for (int i = 0; i < m; i++) clusters.get(i).add(centers.get(i));
 
         for (int v : vertices) {
-            if (assigned.contains(v)) continue;
+            if (centers.contains(v)) continue;
             int bestCluster = -1, minDist = Integer.MAX_VALUE;
-            for (int i = 0; i < m; ++i) {
-                for (int c : clusters.get(i)) {
-                    int d = dist[v][c];
-                    if (d < minDist) {
-                        minDist = d;
-                        bestCluster = i;
-                    }
+            for (int i = 0; i < m; i++) {
+                int d = dist[v][centers.get(i)];
+                if (d < minDist) {
+                    minDist = d;
+                    bestCluster = i;
                 }
             }
             clusters.get(bestCluster).add(v);
-            assigned.add(v);
         }
 
         return clusters;
@@ -211,8 +222,7 @@ public class VRPResolver {
             if (largest.size() - smallest.size() <= 1) break;
 
             int bestNode = -1, bestGain = Integer.MAX_VALUE;
-            for (int i = 0; i < largest.size(); ++i) {
-                int node = largest.get(i);
+            for (int node : largest) {
                 int gain = dist[depot][node];
                 if (gain < bestGain) {
                     bestGain = gain;
@@ -246,43 +256,53 @@ public class VRPResolver {
         return route;
     }
 
-    private static List<Integer> twoOpt(List<Integer> route, int[][] dist) {
-        boolean improvement = true;
-        int size = route.size();
+    private static List<Integer> improveRoute(List<Integer> route, int[][] dist) {
+        RouteWithLength rwl = new RouteWithLength(route, dist);
+        for (int iter = 0; iter < MAX_OPT_ITER; iter++) {
+            RouteWithLength twoOpted = twoOpt(rwl);
+            RouteWithLength relocated = relocate(twoOpted);
+            if (relocated.length >= rwl.length) break;
+            rwl = relocated;
+        }
+        return rwl.route;
+    }
 
+    private static RouteWithLength twoOpt(RouteWithLength rwl) {
+        boolean improvement = true;
         while (improvement) {
             improvement = false;
-            for (int i = 1; i < size - 2; i++) {
-                for (int j = i + 1; j < size - 1; j++) {
-                    int delta = dist[route.get(i - 1)][route.get(j)] +
-                            dist[route.get(i)][route.get(j + 1)] -
-                            dist[route.get(i - 1)][route.get(i)] -
-                            dist[route.get(j)][route.get(j + 1)];
+            for (int i = 1; i < rwl.route.size() - 2; i++) {
+                for (int j = i + 1; j < rwl.route.size() - 1; j++) {
+                    int delta = rwl.dist[rwl.route.get(i - 1)][rwl.route.get(j)] +
+                            rwl.dist[rwl.route.get(i)][rwl.route.get(j + 1)] -
+                            rwl.dist[rwl.route.get(i - 1)][rwl.route.get(i)] -
+                            rwl.dist[rwl.route.get(j)][rwl.route.get(j + 1)];
 
                     if (delta < 0) {
-                        Collections.reverse(route.subList(i, j + 1));
+                        Collections.reverse(rwl.route.subList(i, j + 1));
+                        rwl.length += delta;
                         improvement = true;
                     }
                 }
             }
         }
-        return route;
+        return rwl;
     }
 
-    private static List<Integer> relocate(List<Integer> route, int[][] dist) {
+    private static RouteWithLength relocate(RouteWithLength rwl) {
         boolean improved = true;
         while (improved) {
             improved = false;
-            for (int i = 1; i < route.size() - 1; i++) {
-                int node = route.get(i);
-                for (int j = 1; j < route.size(); j++) {
+            for (int i = 1; i < rwl.route.size() - 1; i++) {
+                int node = rwl.route.get(i);
+                for (int j = 1; j < rwl.route.size(); j++) {
                     if (j == i || j == i + 1) continue;
-                    List<Integer> newRoute = new ArrayList<>(route);
+                    List<Integer> newRoute = new ArrayList<>(rwl.route);
                     newRoute.remove(i);
                     newRoute.add(j < i ? j : j - 1, node);
-
-                    if (calculateRouteLength(newRoute, dist) < calculateRouteLength(route, dist)) {
-                        route = newRoute;
+                    int newLen = calculateRouteLength(newRoute, rwl.dist);
+                    if (newLen < rwl.length) {
+                        rwl.updateRoute(newRoute);
                         improved = true;
                         break;
                     }
@@ -290,32 +310,7 @@ public class VRPResolver {
                 if (improved) break;
             }
         }
-        return route;
-    }
-
-    private static List<Integer> improveRoute(List<Integer> route, int[][] dist) {
-        int iter = 0;
-        boolean improved = true;
-        while (improved && iter++ < MAX_OPT_ITER) {
-            improved = false;
-            int currentLength = calculateRouteLength(route, dist);
-
-            List<Integer> twoOptRoute = twoOpt(route, dist);
-            int twoOptLen = calculateRouteLength(twoOptRoute, dist);
-            if (twoOptLen < currentLength) {
-                route = twoOptRoute;
-                currentLength = twoOptLen;
-                improved = true;
-            }
-
-            List<Integer> relocatedRoute = relocate(route, dist);
-            int relocatedLen = calculateRouteLength(relocatedRoute, dist);
-            if (relocatedLen < currentLength) {
-                route = relocatedRoute;
-                improved = true;
-            }
-        }
-        return route;
+        return rwl;
     }
 
     private static int calculateRouteLength(List<Integer> route, int[][] dist) {
@@ -324,5 +319,22 @@ public class VRPResolver {
             length += dist[route.get(i)][route.get(i + 1)];
         }
         return length;
+    }
+
+    private static class RouteWithLength {
+        List<Integer> route;
+        int length;
+        int[][] dist;
+
+        RouteWithLength(List<Integer> route, int[][] dist) {
+            this.route = route;
+            this.dist = dist;
+            this.length = calculateRouteLength(route, dist);
+        }
+
+        void updateRoute(List<Integer> newRoute) {
+            this.route = newRoute;
+            this.length = calculateRouteLength(newRoute, dist);
+        }
     }
 }
