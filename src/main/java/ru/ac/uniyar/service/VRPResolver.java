@@ -3,6 +3,8 @@ package ru.ac.uniyar.service;
 import ru.ac.uniyar.model.Task;
 import ru.ac.uniyar.model.results.VRPResult;
 import ru.ac.uniyar.utils.Utils;
+import ru.ac.uniyar.utils.Validator;
+import ru.ac.uniyar.utils.Writer;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -11,8 +13,8 @@ import java.util.concurrent.*;
 
 public class VRPResolver {
 
-    private static final int MAX_OPT_ITER = 400;
-    private static final int NUM_TRIALS = 100;
+    private static final int MAX_OPT_ITER = 500;
+    private static final int NUM_TRIALS = 50;
 
     public static VRPResult getAnswer(Task task) {
         int n = task.getSize();
@@ -29,8 +31,7 @@ public class VRPResolver {
         List<Integer> candidates = new ArrayList<>();
         for (int i = 1; i <= n; i++) candidates.add(i);
 
-        candidates.sort(Comparator.comparingInt(i ->
-                Arrays.stream(dist[i]).sum()));
+        candidates.sort(Comparator.comparingInt(i -> Arrays.stream(dist[i]).sum()));
 
         List<Integer> bestDepots = candidates.subList(0, k);
 
@@ -39,17 +40,19 @@ public class VRPResolver {
 
         for (int depot : bestDepots) {
             final int currentDepot = depot;
-            futures.add(CompletableFuture.supplyAsync(() -> {
-                VRPResult best = null;
-                for (int t = 0; t < NUM_TRIALS; ++t) {
-                    VRPResult result = computeResultForDepot(task, currentDepot, m, dist, t);
-                    if (best == null || result.getMaxCycleWeight() < best.getMaxCycleWeight() ||
-                            (result.getMaxCycleWeight() == best.getMaxCycleWeight() && result.getTotalWeight() < best.getTotalWeight())) {
-                        best = result;
-                    }
-                }
-                return best;
-            }, executor));
+            for (int t = 0; t < NUM_TRIALS; ++t) {
+                int finalT = t;
+                futures.add(CompletableFuture.supplyAsync(() -> computeResultForDepot(task, currentDepot, m, dist, finalT), executor));
+            }
+//            List<VRPResult> cur = futures.stream()
+//                    .map(CompletableFuture::join)
+//                    .toList();
+//            VRPResult bestCurResult = cur.stream().min(Comparator
+//                            .comparingInt(VRPResult::getMaxCycleWeight)
+//                            .thenComparingInt(VRPResult::getTotalWeight))
+//                    .orElse(null);
+//            Validator.validateVRPResult(task, bestCurResult);
+//            Writer.writeVRPResult(bestCurResult, "src/main/resources/result/vrp/try_2/%s.txt".formatted(depot), task);
         }
 
         List<VRPResult> results = futures.stream()
@@ -63,6 +66,7 @@ public class VRPResolver {
                         .comparingInt(VRPResult::getMaxCycleWeight)
                         .thenComparingInt(VRPResult::getTotalWeight))
                 .orElse(null);
+//        return null;
     }
 
     private static VRPResult computeResultForDepot(Task task, int depot, int m, int[][] dist, int seed) {
@@ -83,8 +87,6 @@ public class VRPResolver {
             ways.put(vehicleId++, route);
         }
 
-
-        // Improve inter-route
         for (int iter = 0; iter < MAX_OPT_ITER; iter++) {
             boolean improved = false;
             List<Integer> keys = new ArrayList<>(ways.keySet());
@@ -123,7 +125,6 @@ public class VRPResolver {
             if (!improved) break;
         }
 
-        // Shift from longest to shortest
         for (int iter = 0; iter < MAX_OPT_ITER; iter++) {
             boolean improved = false;
             List<Map.Entry<Integer, Integer>> sorted = ways.entrySet().stream()
@@ -172,9 +173,25 @@ public class VRPResolver {
         for (int i = 0; i < m; ++i) clusters.add(new ArrayList<>());
 
         Random random = new Random(seed);
-        Set<Integer> medoids = new HashSet<>();
+        List<Integer> medoids = new ArrayList<>();
+        medoids.add(vertices.get(random.nextInt(vertices.size())));
+
         while (medoids.size() < m) {
-            medoids.add(vertices.get(random.nextInt(vertices.size())));
+            Map<Integer, Integer> minDistances = new HashMap<>();
+            for (int v : vertices) {
+                int minDist = medoids.stream().mapToInt(medoid -> dist[v][medoid]).min().orElse(Integer.MAX_VALUE);
+                minDistances.put(v, minDist);
+            }
+            int total = minDistances.values().stream().mapToInt(Integer::intValue).sum();
+            int r = random.nextInt(total);
+            int cumulative = 0;
+            for (Map.Entry<Integer, Integer> entry : minDistances.entrySet()) {
+                cumulative += entry.getValue();
+                if (cumulative >= r) {
+                    medoids.add(entry.getKey());
+                    break;
+                }
+            }
         }
 
         boolean changed;
@@ -183,19 +200,17 @@ public class VRPResolver {
             for (List<Integer> cluster : clusters) cluster.clear();
             for (int v : vertices) {
                 int best = -1, minDist = Integer.MAX_VALUE;
-                int index = 0;
-                for (int medoid : medoids) {
-                    int d = dist[v][medoid];
+                for (int i = 0; i < medoids.size(); ++i) {
+                    int d = dist[v][medoids.get(i)];
                     if (d < minDist) {
                         minDist = d;
-                        best = index;
+                        best = i;
                     }
-                    index++;
                 }
                 clusters.get(best).add(v);
             }
 
-            Set<Integer> newMedoids = new HashSet<>();
+            List<Integer> newMedoids = new ArrayList<>();
             for (List<Integer> cluster : clusters) {
                 int best = -1, minTotal = Integer.MAX_VALUE;
                 for (int candidate : cluster) {
@@ -208,7 +223,7 @@ public class VRPResolver {
                 newMedoids.add(best);
             }
 
-            if (!newMedoids.equals(medoids)) {
+            if (!new HashSet<>(newMedoids).equals(new HashSet<>(medoids))) {
                 medoids = newMedoids;
                 changed = true;
             }
@@ -227,20 +242,15 @@ public class VRPResolver {
 
             if (largest.size() - smallest.size() <= 1) break;
 
-            int bestNode = -1, bestGain = Integer.MAX_VALUE;
-            for (int node : largest) {
-                int gain = dist[depot][node];
-                if (gain < bestGain) {
-                    bestGain = gain;
-                    bestNode = node;
-                }
-            }
+            int transferCount = (largest.size() - smallest.size()) / 2;
+            List<Integer> toMove = largest.stream()
+                    .sorted(Comparator.comparingInt(node -> dist[depot][node]))
+                    .limit(transferCount)
+                    .toList();
 
-            if (bestNode != -1) {
-                largest.remove((Integer) bestNode);
-                smallest.add(bestNode);
-                changed = true;
-            }
+            largest.removeAll(toMove);
+            smallest.addAll(toMove);
+            changed = true;
         }
     }
 
