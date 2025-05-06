@@ -13,9 +13,9 @@ import ru.ac.uniyar.utils.Writer;
 import ru.ac.uniyar.utils.Reader;
 
 public class Main {
-    private static final TaskSize size = TaskSize.TASK_512;
+    private static final TaskSize size = TaskSize.TASK_128;
     private static final TaskType type = TaskType.VRP;
-    private static final Try tryNum = Try.FIRST;
+    private static final Try tryNum = Try.SECOND;
 
     public static void main(String[] args) {
         Task task = Reader.readTask(String.format("src/main/resources/benchmark/Taxicab_%s.txt", size.getCode()));
