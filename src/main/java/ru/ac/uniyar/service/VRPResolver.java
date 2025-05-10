@@ -14,13 +14,12 @@ import java.util.concurrent.*;
 
 public class VRPResolver {
 
-    private static final int MAX_OPT_ITER = 1000;
+    private static final int MAX_OPT_ITER = 500;
     private static final int NUM_TRIALS = 100;
 
     public static VRPResult getAnswer(Task task) {
         int n = task.getSize();
         int m = (int) (Math.log(n) / Math.log(2));
-        int k = Math.min(n, n);
 
         int[][] dist = new int[n + 1][n + 1];
         for (int i = 1; i <= n; i++) {
@@ -34,7 +33,7 @@ public class VRPResolver {
 
         candidates.sort(Comparator.comparingInt(i -> Arrays.stream(dist[i]).sum()));
 
-        List<Integer> bestDepots = candidates.subList(0, k);
+        List<Integer> bestDepots = candidates.subList(0, 10);
 
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<CompletableFuture<VRPResult>> futures = new ArrayList<>();
@@ -45,15 +44,6 @@ public class VRPResolver {
                 int finalT = t;
                 futures.add(CompletableFuture.supplyAsync(() -> computeResultForDepot(task, currentDepot, m, dist, finalT), executor));
             }
-//            List<VRPResult> cur = futures.stream()
-//                    .map(CompletableFuture::join)
-//                    .toList();
-//            VRPResult bestCurResult = cur.stream().min(Comparator
-//                            .comparingInt(VRPResult::getMaxCycleWeight)
-//                            .thenComparingInt(VRPResult::getTotalWeight))
-//                    .orElse(null);
-//            Validator.validateVRPResult(task, bestCurResult);
-//            Writer.writeVRPResult(bestCurResult, "src/main/resources/result/vrp/try_2/%s.txt".formatted(depot), task);
         }
 
         List<VRPResult> results = futures.stream()
@@ -67,7 +57,6 @@ public class VRPResolver {
                         .comparingInt(VRPResult::getMaxCycleWeight)
                         .thenComparingInt(VRPResult::getTotalWeight))
                 .orElse(null);
-//        return null;
     }
 
     private static VRPResult computeResultForDepot(Task task, int depot, int m, int[][] dist, int seed) {
@@ -163,6 +152,8 @@ public class VRPResolver {
             if (!moveBlockBetweenRoutes(ways, dist, 3)) break;
         }
 
+        tabuSearch(ways, dist, MAX_OPT_ITER, 15);
+
         VRPResult result = new VRPResult();
         result.setDepot(depot);
         result.setWays(ways);
@@ -170,6 +161,8 @@ public class VRPResolver {
         result.setTotalWeight(ways.values().stream().mapToInt(r -> calculateRouteLength(r, dist)).sum());
 
         System.out.println(depot + " " + result.getMaxCycleWeight() + " " + result.getTotalWeight() + " " + Duration.between(start, Instant.now()).toMillis());
+//        Validator.validateVRPResult(task, result);
+//        Writer.writeVRPResult(result, "src/main/resources/result/vrp/4096/%s_%s_%s.txt".formatted(depot, result.getMaxCycleWeight(), result.getTotalWeight()), task);
         return result;
     }
 
@@ -309,28 +302,105 @@ public class VRPResolver {
         return route;
     }
 
-    private static List<Integer> improveRoute(List<Integer> route, int[][] dist) {
-        int iter = 0;
-        boolean improved = true;
-        RouteWithLength rwl = new RouteWithLength(route, dist);
 
-        while (improved && iter++ < MAX_OPT_ITER) {
-            improved = false;
-            int currentLength = rwl.length;
+    private static void tabuSearch(Map<Integer, List<Integer>> ways, int[][] dist, int maxIters, int tabuTenure) {
+        Map<String, Integer> tabuList = new HashMap<>();
+        int iteration = 0;
 
-            RouteWithLength afterTwoOpt = twoOpt(rwl, dist);
-            if (afterTwoOpt.length < currentLength) {
-                rwl = afterTwoOpt;
-                currentLength = rwl.length;
-                improved = true;
+        int bestMax = ways.values().stream().mapToInt(r -> calculateRouteLength(r, dist)).max().orElse(Integer.MAX_VALUE);
+        Map<Integer, List<Integer>> bestWays = new HashMap<>(ways);
+
+        while (iteration < maxIters) {
+            boolean moved = false;
+            int bestDelta = Integer.MAX_VALUE;
+            Move bestMove = null;
+
+            List<Integer> keys = new ArrayList<>(ways.keySet());
+
+            for (int i = 0; i < keys.size(); ++i) {
+                for (int j = 0; j < keys.size(); ++j) {
+                    if (i == j) continue;
+                    List<Integer> from = ways.get(keys.get(i));
+                    List<Integer> to = ways.get(keys.get(j));
+
+                    for (int pos = 1; pos < from.size() - 1; pos++) {
+                        int node = from.get(pos);
+                        for (int insert = 1; insert < to.size(); insert++) {
+                            List<Integer> newFrom = new ArrayList<>(from);
+                            List<Integer> newTo = new ArrayList<>(to);
+                            newFrom.remove(pos);
+                            newTo.add(insert, node);
+
+                            int newMax = Math.max(calculateRouteLength(newFrom, dist), calculateRouteLength(newTo, dist));
+                            int currentMax = Math.max(calculateRouteLength(from, dist), calculateRouteLength(to, dist));
+                            int delta = newMax - currentMax;
+
+                            String moveKey = keys.get(i) + "->" + keys.get(j) + ":" + node;
+
+                            if ((delta < bestDelta && (!tabuList.containsKey(moveKey) || newMax < bestMax))) {
+                                bestDelta = delta;
+                                bestMove = new Move(keys.get(i), keys.get(j), node, pos, insert, moveKey);
+                            }
+                        }
+                    }
+                }
             }
 
+            if (bestMove != null) {
+                List<Integer> from = new ArrayList<>(ways.get(bestMove.fromId));
+                List<Integer> to = new ArrayList<>(ways.get(bestMove.toId));
+
+                from.remove(bestMove.fromPos);
+                to.add(bestMove.toPos, bestMove.node);
+
+                ways.put(bestMove.fromId, improveRoute(from, dist));
+                ways.put(bestMove.toId, improveRoute(to, dist));
+
+                int newMax = ways.values().stream().mapToInt(r -> calculateRouteLength(r, dist)).max().orElse(Integer.MAX_VALUE);
+                if (newMax < bestMax) {
+                    bestMax = newMax;
+                    bestWays = new HashMap<>(ways);
+                }
+
+                tabuList.put(bestMove.key, iteration + tabuTenure);
+                moved = true;
+            }
+
+            int finalIteration = iteration;
+            tabuList.entrySet().removeIf(e -> e.getValue() <= finalIteration);
+            if (!moved) break;
+            iteration++;
+        }
+
+        ways.clear();
+        ways.putAll(bestWays);
+    }
+
+    private record Move(int fromId, int toId, int node, int fromPos, int toPos, String key) {}
+
+
+    private static List<Integer> improveRoute(List<Integer> route, int[][] dist) {
+        RouteWithLength rwl = new RouteWithLength(route, dist);
+        int iter = 0;
+
+        while (iter++ < MAX_OPT_ITER) {
+            boolean improved = false;
+
             RouteWithLength afterRelocate = relocate(rwl, dist);
-            if (afterRelocate.length < currentLength) {
+            if (afterRelocate.length < rwl.length) {
                 rwl = afterRelocate;
                 improved = true;
             }
+
+            RouteWithLength afterTwoOpt = twoOpt(rwl, dist);
+            if (afterTwoOpt.length < rwl.length) {
+                rwl = afterTwoOpt;
+                improved = true;
+            }
+
+            if (!improved) break;
         }
+
         return rwl.route;
     }
 
@@ -371,12 +441,13 @@ public class VRPResolver {
 
 
     private static int calculateRouteLength(List<Integer> route, int[][] dist) {
-        int length = 0;
-        for (int i = 0; i < route.size() - 1; ++i) {
-            length += dist[route.get(i)][route.get(i + 1)];
+        int sum = 0;
+        for (int i = 0; i < route.size() - 1; i++) {
+            sum += dist[route.get(i)][route.get(i + 1)];
         }
-        return length;
+        return sum;
     }
+
 
     private static RouteWithLength twoOpt(RouteWithLength rwl, int[][] dist) {
         boolean improvement = true;
