@@ -1,6 +1,7 @@
 package ru.ac.uniyar.utils;
 
 import ru.ac.uniyar.model.Task;
+import ru.ac.uniyar.model.results.C4C3FreeResult;
 import ru.ac.uniyar.model.results.LCMSTResult;
 import ru.ac.uniyar.model.Edge;
 import ru.ac.uniyar.model.results.VRPResult;
@@ -36,6 +37,18 @@ public class Writer {
                     int v = way.get(i + 1);
                     writer.write(String.format("e\t%s\t%s\n", u, v));
                 }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void writeBiggestSubGraphResult(C4C3FreeResult result, String path, Task task) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
+            writer.write(String.format("c\tВес\tподграфа\t=\t%s,\tчисло\tребер\t=\t%s,\n", result.getWeight(), result.getEdges().size()));
+            writer.write(String.format("p\tedge\t%s\t%s\n", task.getSize(), result.getEdges().size()));
+            for (Edge edge : result.getEdges()) {
+                writer.write(String.format("e\t%s\t%s\n", edge.getVertex1(), edge.getVertex2()));
             }
         } catch (Exception e) {
             e.printStackTrace();

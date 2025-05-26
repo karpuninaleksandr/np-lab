@@ -1,13 +1,13 @@
 package ru.ac.uniyar.utils;
 
+import ru.ac.uniyar.model.Vertex;
+import ru.ac.uniyar.model.results.C4C3FreeResult;
 import ru.ac.uniyar.model.results.LCMSTResult;
 import ru.ac.uniyar.model.Task;
 import ru.ac.uniyar.model.Edge;
 import ru.ac.uniyar.model.results.VRPResult;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Validator {
     public static void validateLCMSTResult(Task task, LCMSTResult result) {
@@ -42,5 +42,71 @@ public class Validator {
             totalWeight += currWeight;
         }
         System.out.println(totalWeight == result.getTotalWeight() && m == result.getWays().size() && maxCycleWeight == result.getMaxCycleWeight() ? "VALID" : "NOT VALID");
+    }
+
+    public static void validateC4C3FreeResult(Task task, C4C3FreeResult result) {
+        Map<Integer, Vertex> vertexes = task.getVertexes();
+        Map<Integer, Set<Integer>> adjacency = new HashMap<>();
+        int computedWeight = 0;
+
+        for (int i = 1; i <= task.getSize(); ++i) {
+            adjacency.put(i, new HashSet<>());
+        }
+
+        for (Edge edge : result.getEdges()) {
+            int u = edge.getVertex1();
+            int v = edge.getVertex2();
+
+            if (!vertexes.containsKey(u) || !vertexes.containsKey(v)) {
+                System.out.println("NOT VALID (invalid vertex)");
+                return;
+            }
+
+            if (adjacency.get(u).contains(v)) {
+                System.out.println("NOT VALID (duplicate edge)");
+                return;
+            }
+
+            adjacency.get(u).add(v);
+            adjacency.get(v).add(u);
+
+            computedWeight += Utils.getDistance(vertexes.get(u), vertexes.get(v));
+        }
+
+        for (int u : adjacency.keySet()) {
+            for (int v : adjacency.get(u)) {
+                if (v <= u) continue;
+                for (int w : adjacency.get(v)) {
+                    if (w <= v || w == u) continue;
+                    if (adjacency.get(w).contains(u)) {
+                        System.out.println("NOT VALID (triangle found)");
+                        return;
+                    }
+                }
+            }
+        }
+
+        for (int u : adjacency.keySet()) {
+            for (int v : adjacency.get(u)) {
+                if (v <= u) continue;
+                for (int x : adjacency.get(u)) {
+                    if (x == v || x <= u) continue;
+                    for (int y : adjacency.get(v)) {
+                        if (y == u || y == x || y <= v) continue;
+                        if (adjacency.get(x).contains(y)) {
+                            System.out.println("NOT VALID (square found)");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (computedWeight != result.getWeight()) {
+            System.out.println("NOT VALID (weight mismatch)");
+            return;
+        }
+
+        System.out.println("VALID");
     }
 }

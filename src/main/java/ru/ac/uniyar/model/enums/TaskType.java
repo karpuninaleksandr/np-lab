@@ -2,5 +2,6 @@ package ru.ac.uniyar.model.enums;
 
 public enum TaskType {
     LCMST,
-    VRP;
+    VRP,
+    C4C3FREE;
 }

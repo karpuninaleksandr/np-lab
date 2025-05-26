@@ -14,8 +14,8 @@ import java.util.concurrent.*;
 
 public class VRPResolver {
 
-    private static final int MAX_OPT_ITER = 500;
-    private static final int NUM_TRIALS = 100;
+    private static final int MAX_OPT_ITER = 100;
+    private static final int NUM_TRIALS = 10;
 
     public static VRPResult getAnswer(Task task) {
         int n = task.getSize();
