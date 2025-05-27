@@ -16,7 +16,7 @@ import java.util.concurrent.*;
 public class C4C3FreeResolver {
 
     public static C4C3FreeResult resolve(Task task) throws InterruptedException, ExecutionException {
-        final int NUM_STARTS = 10;
+        final int NUM_STARTS = 200;
 
         Map<Integer, Vertex> vertexes = task.getVertexes();
         List<Edge> allEdges = generateAllEdges(vertexes);
@@ -53,6 +53,7 @@ public class C4C3FreeResolver {
         final int RCL_SIZE = 2;
         final int MAX_ITERATIONS = 50000;
         final int TABU_TENURE = 1000;
+        final int MAX_NO_IMPROVEMENT = 30;
 
         Collections.shuffle(allEdges, new Random(seed));
 
@@ -70,6 +71,7 @@ public class C4C3FreeResolver {
         List<Edge> bestLocalSolution = new ArrayList<>(currentSolution);
         int bestLocalWeight = getTotalWeight(currentSolution);
         Map<String, Integer> tabuList = new HashMap<>();
+        int noImprovementCounter = 0;
 
         for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
             List<Edge> candidateSolution = new ArrayList<>(currentSolution);
@@ -100,6 +102,12 @@ public class C4C3FreeResolver {
             if (candidateWeight > bestLocalWeight) {
                 bestLocalWeight = candidateWeight;
                 bestLocalSolution = new ArrayList<>(candidateSolution);
+                noImprovementCounter = 0;
+            } else {
+                noImprovementCounter++;
+                if (noImprovementCounter >= MAX_NO_IMPROVEMENT) {
+                    break;
+                }
             }
 
             currentSolution = candidateSolution;
@@ -110,8 +118,7 @@ public class C4C3FreeResolver {
         result.setEdges(bestLocalSolution);
         result.setWeight(bestLocalWeight);
         System.out.println(bestLocalWeight + " " + Duration.between(start, Instant.now()).toMillis());
-//        Writer.writeBiggestSubGraphResult(result, "src/main/resources/result/biggestsubgraph/try_2/2048_%s.txt"
-//                .formatted(result.getWeight()), task);
+//        Writer.writeBiggestSubGraphResult(result, "src/main/resources/result/biggestsubgraph/2048/%s.txt".formatted(result.getWeight()), task);
 //        Validator.validateC4C3FreeResult(task, result);
         return result;
     }
