@@ -19,7 +19,8 @@ public class C4C3FreeResolver {
         final int NUM_STARTS = 200;
 
         Map<Integer, Vertex> vertexes = task.getVertexes();
-        List<Edge> allEdges = generateAllEdges(vertexes);
+        Map<Long, Integer> distanceCache = new HashMap<>();
+        List<Edge> allEdges = generateAllEdges(vertexes, distanceCache);
 
         allEdges.sort(Comparator.comparingInt(Edge::getWeight).reversed());
         List<Edge> topEdges = new ArrayList<>(allEdges);
@@ -50,22 +51,29 @@ public class C4C3FreeResolver {
 
     private static C4C3FreeResult runGRASPAttempt(Task task, List<Edge> allEdges, int seed) {
         Instant start = Instant.now();
+        final int RCL_POOL_SIZE = 20;
         final int RCL_SIZE = 2;
-        final int MAX_ITERATIONS = 50000;
+        final int MAX_ITERATIONS = 500000;
         final int TABU_TENURE = 1000;
-        final int MAX_NO_IMPROVEMENT = 30;
+        final int MAX_NO_IMPROVEMENT = 50;
 
         Collections.shuffle(allEdges, new Random(seed));
 
         List<Edge> currentSolution = new ArrayList<>();
         Map<Integer, BitSet> adjacency = initializeAdjacency(task.getVertexes());
 
+        List<Edge> candidateRCL = new ArrayList<>();
         for (Edge edge : allEdges) {
             if (canAddEdge(edge, adjacency)) {
-                addEdge(edge, adjacency);
-                currentSolution.add(edge);
-                if (currentSolution.size() >= RCL_SIZE) break;
+                candidateRCL.add(edge);
+                if (candidateRCL.size() >= RCL_POOL_SIZE) break;
             }
+        }
+        Collections.shuffle(candidateRCL, new Random(seed));
+        for (int i = 0; i < RCL_SIZE && i < candidateRCL.size(); i++) {
+            Edge chosen = candidateRCL.get(i);
+            addEdge(chosen, adjacency);
+            currentSolution.add(chosen);
         }
 
         List<Edge> bestLocalSolution = new ArrayList<>(currentSolution);
@@ -78,7 +86,7 @@ public class C4C3FreeResolver {
             Map<Integer, BitSet> candidateAdj = buildAdjacency(candidateSolution, task.getVertexes());
 
             candidateSolution.sort(Comparator.comparingInt(Edge::getWeight));
-            int toRemove = Math.min(2, candidateSolution.size());
+            int toRemove = Math.min(3, candidateSolution.size());
             for (int i = 0; i < toRemove; i++) {
                 Edge e = candidateSolution.remove(0);
                 removeEdge(e, candidateAdj);
@@ -94,7 +102,7 @@ public class C4C3FreeResolver {
                     candidateSolution.add(edge);
                     tabuList.put(move, iter + TABU_TENURE);
                     additions++;
-                    if (additions >= 3) break;
+                    if (additions >= 5) break;
                 }
             }
 
@@ -114,24 +122,36 @@ public class C4C3FreeResolver {
             System.out.println("iter: " + iter + "/" + MAX_ITERATIONS + " : " + bestLocalWeight);
         }
 
+        Map<Integer, BitSet> finalAdj = buildAdjacency(bestLocalSolution, task.getVertexes());
+        for (Edge edge : allEdges) {
+            if (bestLocalSolution.contains(edge)) continue;
+            if (canAddEdge(edge, finalAdj)) {
+                addEdge(edge, finalAdj);
+                bestLocalSolution.add(edge);
+                bestLocalWeight += edge.getWeight();
+            }
+        }
+
         C4C3FreeResult result = new C4C3FreeResult();
         result.setEdges(bestLocalSolution);
         result.setWeight(bestLocalWeight);
         System.out.println(bestLocalWeight + " " + Duration.between(start, Instant.now()).toMillis());
-//        Writer.writeBiggestSubGraphResult(result, "src/main/resources/result/biggestsubgraph/2048/%s.txt".formatted(result.getWeight()), task);
-//        Validator.validateC4C3FreeResult(task, result);
+        Writer.writeBiggestSubGraphResult(result, "src/main/resources/result/biggestsubgraph/2048/4096_%s.txt".formatted(result.getWeight()), task);
+        Validator.validateC4C3FreeResult(task, result);
         return result;
     }
 
-    private static List<Edge> generateAllEdges(Map<Integer, Vertex> vertexes) {
+    private static List<Edge> generateAllEdges(Map<Integer, Vertex> vertexes, Map<Long, Integer> cache) {
         List<Integer> keys = new ArrayList<>(vertexes.keySet());
         List<Edge> edges = new ArrayList<>();
         for (int i = 0; i < keys.size(); i++) {
             for (int j = i + 1; j < keys.size(); j++) {
                 Vertex v1 = vertexes.get(keys.get(i));
                 Vertex v2 = vertexes.get(keys.get(j));
-                int weight = Utils.getDistance(v1, v2);
-                edges.add(new Edge(v1.getNumber(), v2.getNumber(), weight));
+                int id1 = v1.getNumber(), id2 = v2.getNumber();
+                long key = Math.min(id1, id2) * 1_000_000L + Math.max(id1, id2);
+                int weight = cache.computeIfAbsent(key, k -> Utils.getDistance(v1, v2));
+                edges.add(new Edge(id1, id2, weight));
             }
         }
         return edges;
